@@ -38,6 +38,8 @@ class Job(Base):
     ocr_languages = Column(String(100), default="ko,en", nullable=False)
     enable_embedding = Column(Boolean, default=False, nullable=False)
     use_hybrid = Column(Boolean, default=False, nullable=False)
+    auto_reprocessed = Column(Boolean, default=False, nullable=False)
+    reprocess_reason = Column(String(50), nullable=True)
     error_message = Column(Text, nullable=True)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)

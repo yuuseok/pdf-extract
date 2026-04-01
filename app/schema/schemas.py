@@ -49,6 +49,8 @@ class JobResponse(BaseModel):
     ocr_languages: str
     enable_embedding: bool
     use_hybrid: bool
+    auto_reprocessed: bool
+    reprocess_reason: Optional[str]
     error_message: Optional[str]
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
