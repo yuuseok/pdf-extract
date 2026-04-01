@@ -1,21 +1,24 @@
 services:
-  # ---- PostgreSQL ----
-  db:
-    image: postgres:16-alpine
+  # ---- FastAPI App ----
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: pdf_extract
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_prod_password}
+    env_file:
+      - ${ENV_FILE:-.env.dev}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - uploads:/data/uploads
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      hybrid:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ---- Hybrid AI Backend ----
   hybrid:
@@ -40,29 +43,5 @@ services:
         limits:
           memory: 4G
 
-  # ---- FastAPI App ----
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file:
-      - .env.prod
-    volumes:
-      - uploads:/data/uploads
-    ports:
-      - "${APP_PORT:-8000}:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      hybrid:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 volumes:
-  pgdata:
   uploads:
