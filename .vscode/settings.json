@@ -1,0 +1,17 @@
+{
+  "python.defaultInterpreterPath": "./.venv/bin/python",
+  "python.languageServer": "None",
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true
+  },
+  "files.associations": {
+    "*.py": "python"
+  },
+  "search.exclude": {
+    "**/.venv": true,
+    "**/node_modules": true,
+    "**/__pycache__": true
+  }
+}
