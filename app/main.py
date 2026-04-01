@@ -121,7 +121,7 @@ app = FastAPI(
 app.include_router(file_router.router)
 app.include_router(job_router.router)
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 # --- Page Routes ---
