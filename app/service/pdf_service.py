@@ -23,6 +23,7 @@ class PdfService:
                 "output_dir": output_dir,
                 "format": "text,markdown,json",
                 "quiet": True,
+                "table_method": "cluster",  # v2.0: 병합 셀/복잡한 표 개선
             }
 
             # OCR이 필요하면 반드시 hybrid + full 모드 (OCR은 hybrid 서버에서만 가능)
