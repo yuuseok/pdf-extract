@@ -177,6 +177,17 @@ class JobService:
         service = service_map[format_type]
         return service.extract(file_path)
 
+    @staticmethod
+    def _sanitize_for_pg(data):
+        """PostgreSQL에 저장할 수 없는 null 문자(\u0000)를 재귀적으로 제거."""
+        if isinstance(data, str):
+            return data.replace("\x00", "")
+        elif isinstance(data, dict):
+            return {k: JobService._sanitize_for_pg(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [JobService._sanitize_for_pg(item) for item in data]
+        return data
+
     async def _save_results_and_chunks(
         self,
         extraction: dict,
@@ -187,13 +198,14 @@ class JobService:
         """추출 결과를 정규화하여 저장하고 청킹 처리."""
         normalized_text = self.normalizer.normalize(extraction["text"])
         normalized_markdown = self.normalizer.normalize(extraction["markdown"])
+        sanitized_json = self._sanitize_for_pg(extraction.get("json_raw", extraction["json"]))
 
         result = Result(
             job_id=job.id,
             file_id=job.file_id,
             content_text=normalized_text,
             content_markdown=normalized_markdown,
-            content_json=extraction.get("json_raw", extraction["json"]),
+            content_json=sanitized_json,
         )
         result = await result_repo.create(result)
 

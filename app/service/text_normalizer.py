@@ -92,6 +92,9 @@ class TextNormalizer:
         if not text:
             return text
 
+        # 0. null 문자 제거 (PostgreSQL text/jsonb에서 \u0000 저장 불가)
+        text = text.replace("\x00", "")
+
         # 1. 줄 단위 정규화 (원본 기준으로 판단해야 하므로 가장 먼저)
         text = self._normalize_lines(text)
 
