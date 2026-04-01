@@ -1,7 +1,10 @@
 import logging
+import shutil
 import subprocess
+import sys
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
@@ -22,7 +25,17 @@ def start_hybrid_server() -> subprocess.Popen | None:
     """Start opendataloader-pdf-hybrid server as a background process (local mode only)."""
     try:
         port = settings.hybrid_server_url.split(":")[-1]
-        cmd = ["opendataloader-pdf-hybrid", "--port", port]
+
+        # venv 내 바이너리 경로를 우선 사용
+        hybrid_bin = shutil.which("opendataloader-pdf-hybrid")
+        if not hybrid_bin:
+            venv_bin = Path(sys.executable).parent / "opendataloader-pdf-hybrid"
+            if venv_bin.exists():
+                hybrid_bin = str(venv_bin)
+            else:
+                raise FileNotFoundError("opendataloader-pdf-hybrid not found in PATH or venv")
+
+        cmd = [hybrid_bin, "--port", port]
         if settings.hybrid_force_ocr:
             cmd.append("--force-ocr")
             cmd.extend(["--ocr-lang", settings.hybrid_ocr_lang])
