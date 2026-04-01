@@ -2,6 +2,7 @@ uploads/
 __pycache__/
 *.pyc
 .env
+.env.prod
 *.egg-info/
 .pytest_cache/
 .venv/

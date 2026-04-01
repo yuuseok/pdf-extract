@@ -1,0 +1,29 @@
+# ---- Hybrid Server (Docling AI Backend) ----
+FROM python:3.11-slim
+
+# Java 설치
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends default-jre-headless && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# uv 설치
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+# hybrid 패키지만 설치
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+EXPOSE 5002
+
+# 환경변수로 OCR 설정 제어
+ENV HYBRID_PORT=5002
+ENV HYBRID_FORCE_OCR=false
+ENV HYBRID_OCR_LANG=ko,en
+
+# 시작 스크립트
+COPY docker/start-hybrid.sh ./
+RUN chmod +x start-hybrid.sh
+
+CMD ["./start-hybrid.sh"]

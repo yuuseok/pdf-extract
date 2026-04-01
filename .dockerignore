@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.dev
+.env.prod
+.git/
+.claude/
+.vscode/
+uploads/
+tests/
+docs/
+*.pdf
+.pytest_cache/
+.gitignore
+.dockerignore
+docker-compose*.yml
