@@ -92,26 +92,58 @@ class TextNormalizer:
         if not text:
             return text
 
-        # 1. 단일 문자 치환 (빠름)
+        # 1. 줄 단위 정규화 (원본 기준으로 판단해야 하므로 가장 먼저)
+        text = self._normalize_lines(text)
+
+        # 2. 단일 문자 치환 (빠름)
         text = text.translate(self._trans_table)
 
-        # 2. 다중 문자 치환
+        # 3. 다중 문자 치환
         for old, new in self._multi_char_map.items():
             text = text.replace(old, new)
 
-        # 3. Private Use Area 문자 제거 (U+E000~U+F8FF, U+F0000~U+FFFFF)
+        # 4. Private Use Area 문자 제거 (U+E000~U+F8FF, U+F0000~U+FFFFF)
         text = re.sub(r"[\uE000-\uF8FF]", "", text)
 
-        # 4. 전각 영숫자 → 반각 (Ａ→A, ０→0 등)
+        # 5. 전각 영숫자 → 반각 (Ａ→A, ０→0 등)
         text = self._fullwidth_to_halfwidth(text)
 
-        # 5. 연속 공백 정리
+        # 6. 연속 공백 정리
         text = re.sub(r"[ \t]+", " ", text)
 
-        # 6. 연속 빈 줄 정리 (3개 이상 → 2개)
+        # 7. 연속 빈 줄 정리 (3개 이상 → 2개)
         text = re.sub(r"\n{3,}", "\n\n", text)
 
         return text.strip()
+
+    def _normalize_lines(self, text: str) -> str:
+        """줄 단위 패턴 정규화."""
+        lines = text.split("\n")
+        result = []
+        for line in lines:
+            stripped = line.strip()
+
+            # 목차 점선 제거 (예: "1. 조사 목적····················3")
+            if "···" in stripped:
+                # 점선과 끝의 페이지 번호 제거, 제목만 남김
+                cleaned = re.sub(r"·{3,}\s*\d*\s*", " ", stripped).strip()
+                if cleaned:
+                    result.append(cleaned)
+                continue
+
+            # 페이지 번호 단독 줄 제거 (ASCII 숫자 1~3자리만)
+            if re.match(r"^[0-9]{1,3}$", stripped):
+                continue
+
+            # 불릿 'l' → '·' (줄 시작이 'l '이고 한글 내용이 뒤따르는 경우)
+            if re.match(r"^l\s+[가-힣\(]", stripped):
+                stripped = "· " + stripped[2:]
+                result.append(stripped)
+                continue
+
+            result.append(line)
+
+        return "\n".join(result)
 
     def _fullwidth_to_halfwidth(self, text: str) -> str:
         """전각 영숫자/기호를 반각으로 변환."""

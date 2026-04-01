@@ -58,3 +58,35 @@ def test_real_world_sample():
     raw = "｢2026년 물순환 촉진구역 지정｣ 공모\n￭ 촉진구역 면적 : 26,477,108㎡\nⅠ. 촉진구역 개요"
     expected = '"2026년 물순환 촉진구역 지정" 공모\n· 촉진구역 면적 : 26,477,108m²\nI. 촉진구역 개요'
     assert n.normalize(raw) == expected
+
+
+def test_toc_dots_removed():
+    n = TextNormalizer()
+    assert n.normalize("1. 조사 목적·························································3") == "1. 조사 목적"
+    assert n.normalize("1) 표본규모 결정······················································4") == "1) 표본규모 결정"
+
+
+def test_page_number_lines_removed():
+    n = TextNormalizer()
+    assert n.normalize("내용\n3\n다음내용") == "내용\n다음내용"
+    assert n.normalize("내용\n94\n다음내용") == "내용\n다음내용"
+    # 4자리 이상은 유지 (숫자 데이터일 수 있음)
+    assert "1234" in n.normalize("내용\n1234\n다음내용")
+
+
+def test_bullet_l_to_dot():
+    n = TextNormalizer()
+    assert n.normalize("l 본 조사는 경상북도 도민의") == "· 본 조사는 경상북도 도민의"
+    assert n.normalize("l 통계법 제15조") == "· 통계법 제15조"
+    # 일반 영어 l은 변환하지 않음
+    assert n.normalize("let me check") == "let me check"
+
+
+def test_combined_patterns():
+    n = TextNormalizer()
+    raw = "l 안동시 면적(㎢)은 ｢도시계획｣에 따라\n1. 개요···················3\n94\nl (참고) 추가 설명"
+    result = n.normalize(raw)
+    assert "· 안동시 면적(km²)은" in result
+    assert "···" not in result
+    assert "\n94\n" not in result
+    assert "· (참고) 추가 설명" in result
