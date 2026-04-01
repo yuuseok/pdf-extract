@@ -140,25 +140,30 @@
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
         formData.append('chunking_strategy', uploadForm.chunking_strategy.value);
-        formData.append('use_hybrid', uploadForm.use_hybrid.checked);
-        formData.append('ocr_enabled', uploadForm.ocr_enabled.checked);
+        formData.append('use_hybrid', String(uploadForm.use_hybrid.checked));
+        formData.append('ocr_enabled', String(uploadForm.ocr_enabled.checked));
 
         loading.classList.remove('hidden');
         results.classList.add('hidden');
         document.getElementById('uploadBtn').disabled = true;
 
         try {
+            console.log('Uploading file...');
             const res = await fetch('/api/v1/files/upload', { method: 'POST', body: formData });
             const data = await res.json();
+            console.log('Upload response:', data);
 
             if (!res.ok) {
-                alert(data.detail?.message || 'Upload failed');
+                loading.classList.add('hidden');
+                alert(data.detail?.message || JSON.stringify(data.detail) || 'Upload failed');
                 return;
             }
 
             // Poll for result
             await pollJob(data.job_id);
         } catch (err) {
+            loading.classList.add('hidden');
+            console.error('Upload error:', err);
             alert('Error: ' + err.message);
         } finally {
             document.getElementById('uploadBtn').disabled = false;
@@ -166,23 +171,47 @@
     });
 
     async function pollJob(jobId) {
-        while (true) {
-            await new Promise(r => setTimeout(r, 2000));
-            const res = await fetch(`/api/v1/jobs/${jobId}`);
-            const job = await res.json();
-            statusText.textContent = job.status;
+        console.log('Polling job:', jobId);
+        let attempts = 0;
+        const maxAttempts = 300; // 10분 (2초 x 300)
 
-            if (job.status === 'COMPLETED') {
-                const resultRes = await fetch(`/api/v1/jobs/${jobId}/result`);
-                const result = await resultRes.json();
-                showResults(result, job);
-                return;
-            } else if (job.status === 'FAILED') {
-                loading.classList.add('hidden');
-                alert('처리 실패: ' + (job.error_message || 'Unknown error'));
-                return;
+        while (attempts < maxAttempts) {
+            attempts++;
+            await new Promise(r => setTimeout(r, 2000));
+
+            try {
+                const res = await fetch(`/api/v1/jobs/${jobId}`);
+                if (!res.ok) {
+                    console.error('Poll error:', res.status);
+                    continue;
+                }
+                const job = await res.json();
+                statusText.textContent = `${job.status} (${attempts * 2}s)`;
+                console.log(`Poll #${attempts}: ${job.status}`);
+
+                if (job.status === 'COMPLETED') {
+                    const resultRes = await fetch(`/api/v1/jobs/${jobId}/result`);
+                    if (!resultRes.ok) {
+                        console.error('Result fetch error:', resultRes.status);
+                        loading.classList.add('hidden');
+                        alert('결과 조회 실패');
+                        return;
+                    }
+                    const result = await resultRes.json();
+                    showResults(result, job);
+                    return;
+                } else if (job.status === 'FAILED') {
+                    loading.classList.add('hidden');
+                    alert('처리 실패: ' + (job.error_message || 'Unknown error'));
+                    return;
+                }
+            } catch (err) {
+                console.error('Poll exception:', err);
             }
         }
+
+        loading.classList.add('hidden');
+        alert('처리 시간 초과 (10분). Files 페이지에서 결과를 확인해주세요.');
     }
 
     function showResults(result, job) {
