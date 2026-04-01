@@ -7,7 +7,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 
 from app.config import settings
@@ -118,6 +120,50 @@ app = FastAPI(
 
 app.include_router(file_router.router)
 app.include_router(job_router.router)
+
+templates = Jinja2Templates(directory="app/templates")
+
+
+# --- Page Routes ---
+
+@app.get("/", response_class=HTMLResponse)
+async def page_upload(request: Request):
+    return templates.TemplateResponse("upload.html", {"request": request})
+
+
+@app.get("/files", response_class=HTMLResponse)
+async def page_files(request: Request):
+    return templates.TemplateResponse("files.html", {"request": request})
+
+
+@app.get("/files/{file_id}", response_class=HTMLResponse)
+async def page_detail(request: Request, file_id: str):
+    from uuid import UUID
+    from app.database import async_session as get_session
+    from app.repository.file_repository import FileRepository
+    from app.repository.job_repository import JobRepository
+    from app.repository.result_repository import ResultRepository
+
+    async with get_session() as db:
+        file_repo = FileRepository(db)
+        file_obj = await file_repo.get_by_id(UUID(file_id))
+        if not file_obj:
+            return templates.TemplateResponse("detail.html", {
+                "request": request, "file": None, "job": None, "result": None,
+            })
+
+        job_repo = JobRepository(db)
+        jobs = await job_repo.get_by_file_id(UUID(file_id))
+        job = jobs[0] if jobs else None
+
+        result = None
+        if job:
+            result_repo = ResultRepository(db)
+            result = await result_repo.get_by_job_id(job.id)
+
+    return templates.TemplateResponse("detail.html", {
+        "request": request, "file": file_obj, "job": job, "result": result,
+    })
 
 
 @app.get("/health")

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ file.original_filename }} - PDF Extract{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+            <a href="/files" class="btn btn-ghost btn-sm btn-circle">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+            </a>
+            <div>
+                <h2 class="text-lg font-bold">{{ file.original_filename }}</h2>
+                <p class="text-xs text-base-content/50">
+                    {{ (file.file_size / 1024 / 1024) | round(1) }} MB
+                    {% if file.page_count %} &middot; {{ file.page_count }} pages{% endif %}
+                    &middot; {{ file.created_at.strftime('%Y-%m-%d %H:%M') }}
+                </p>
+            </div>
+        </div>
+        {% if job %}
+        <div class="flex items-center gap-2">
+            {% if job.auto_reprocessed %}
+            <div class="badge badge-warning badge-sm">Auto: {{ job.reprocess_reason }}</div>
+            {% endif %}
+            {% if job.status == 'COMPLETED' %}
+            <div class="badge badge-success">{{ job.status }}</div>
+            {% elif job.status == 'FAILED' %}
+            <div class="badge badge-error">{{ job.status }}</div>
+            {% else %}
+            <div class="badge badge-info">{{ job.status }}</div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if not result %}
+    <div class="alert alert-warning">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.072 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+        <span>결과가 아직 생성되지 않았습니다. {% if job and job.status == 'FAILED' %}오류: {{ job.error_message }}{% endif %}</span>
+    </div>
+    {% else %}
+    <!-- 3-Column Results -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Text -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-3">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-bold text-sm">Text</h3>
+                    <button onclick="copyContent('text')" class="btn btn-ghost btn-xs">Copy</button>
+                </div>
+                <textarea id="content-text" class="result-box textarea textarea-bordered w-full text-xs" rows="25" readonly>{{ result.content_text }}</textarea>
+            </div>
+        </div>
+
+        <!-- Markdown -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-3">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-bold text-sm">Markdown</h3>
+                    <button onclick="copyContent('markdown')" class="btn btn-ghost btn-xs">Copy</button>
+                </div>
+                <textarea id="content-markdown" class="result-box textarea textarea-bordered w-full text-xs" rows="25" readonly>{{ result.content_markdown }}</textarea>
+            </div>
+        </div>
+
+        <!-- JSON -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-3">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-bold text-sm">JSON</h3>
+                    <button onclick="copyContent('json')" class="btn btn-ghost btn-xs">Copy</button>
+                </div>
+                <textarea id="content-json" class="result-box textarea textarea-bordered w-full text-xs" rows="25" readonly>{{ result.content_json | tojson(indent=2) }}</textarea>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function copyContent(type) {
+        const el = document.getElementById(`content-${type}`);
+        el.select();
+        navigator.clipboard.writeText(el.value);
+
+        // Toast feedback
+        const toast = document.createElement('div');
+        toast.className = 'toast toast-end';
+        toast.innerHTML = '<div class="alert alert-success text-sm py-2"><span>Copied!</span></div>';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 1500);
+    }
+</script>
+{% endblock %}

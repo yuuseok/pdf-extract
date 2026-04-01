@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Files - PDF Extract{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-bold">Uploaded Files</h2>
+        <a href="/" class="btn btn-primary btn-sm">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+            New Upload
+        </a>
+    </div>
+
+    <div id="fileList" class="space-y-3">
+        <div class="text-center py-8 text-base-content/40">
+            <span class="loading loading-spinner loading-md"></span>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="pagination" class="flex justify-center mt-6 gap-2"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentPage = 1;
+
+    async function loadFiles(page = 1) {
+        currentPage = page;
+        const res = await fetch(`/api/v1/files?page=${page}&per_page=10`);
+        const data = await res.json();
+
+        const fileList = document.getElementById('fileList');
+
+        if (data.items.length === 0) {
+            fileList.innerHTML = `
+                <div class="text-center py-12 text-base-content/40">
+                    <svg class="mx-auto h-12 w-12 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                    <p class="text-sm">업로드된 파일이 없습니다</p>
+                </div>`;
+            return;
+        }
+
+        fileList.innerHTML = data.items.map(file => {
+            const ext = file.file_extension.replace('.', '').toUpperCase();
+            const sizeMB = (file.file_size / 1024 / 1024).toFixed(1);
+            const date = new Date(file.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+            const badgeColor = { PDF: 'badge-error', DOCX: 'badge-info', XLSX: 'badge-success', PPTX: 'badge-warning', CSV: 'badge-neutral' }[ext] || 'badge-ghost';
+
+            return `
+            <div class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow">
+                <div class="card-body p-4 flex-row items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="badge ${badgeColor} badge-sm font-mono">${ext}</div>
+                        <div>
+                            <p class="font-medium text-sm">${file.original_filename}</p>
+                            <p class="text-xs text-base-content/50">${sizeMB} MB &middot; ${file.page_count ? file.page_count + ' pages' : ''} &middot; ${date}</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="/files/${file.id}" class="btn btn-ghost btn-sm">Detail</a>
+                        <button onclick="deleteFile('${file.id}')" class="btn btn-ghost btn-sm text-error">Delete</button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        // Pagination
+        const pagination = document.getElementById('pagination');
+        if (data.pages > 1) {
+            let html = '';
+            for (let i = 1; i <= data.pages; i++) {
+                html += `<button class="btn btn-sm ${i === page ? 'btn-primary' : 'btn-ghost'}" onclick="loadFiles(${i})">${i}</button>`;
+            }
+            pagination.innerHTML = html;
+        } else {
+            pagination.innerHTML = '';
+        }
+    }
+
+    async function deleteFile(fileId) {
+        if (!confirm('파일을 삭제하시겠습니까?')) return;
+        await fetch(`/api/v1/files/${fileId}`, { method: 'DELETE' });
+        loadFiles(currentPage);
+    }
+
+    loadFiles();
+</script>
+{% endblock %}

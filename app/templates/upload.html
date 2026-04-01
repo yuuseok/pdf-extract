@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Upload - PDF Extract{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Upload Section -->
+    <div class="card bg-base-100 shadow-md">
+        <div class="card-body">
+            <h2 class="card-title text-lg">Document Upload</h2>
+            <p class="text-sm text-base-content/60">PDF, Word, Excel, PowerPoint, CSV 파일을 업로드하면 텍스트를 추출합니다.</p>
+
+            <form id="uploadForm" class="mt-4 space-y-4">
+                <!-- File Drop Zone -->
+                <div id="dropZone" class="border-2 border-dashed border-base-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all">
+                    <svg class="mx-auto h-10 w-10 text-base-content/30 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p class="text-sm font-medium">클릭하거나 파일을 드래그하세요</p>
+                    <p class="text-xs text-base-content/40 mt-1">PDF, DOCX, XLSX, PPTX, CSV (최대 200MB)</p>
+                    <input type="file" id="fileInput" name="file" class="hidden" accept=".pdf,.docx,.xlsx,.xls,.pptx,.csv,.tsv" />
+                </div>
+
+                <div id="fileInfo" class="hidden alert alert-info text-sm">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    <span id="fileName"></span>
+                </div>
+
+                <!-- Options -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <select name="chunking_strategy" class="select select-bordered select-sm w-full">
+                        <option value="semantic">Semantic Chunking</option>
+                        <option value="fixed">Fixed Size</option>
+                        <option value="hybrid">Hybrid</option>
+                    </select>
+                    <label class="label cursor-pointer gap-2 justify-start">
+                        <input type="checkbox" name="use_hybrid" class="toggle toggle-sm toggle-primary" />
+                        <span class="label-text text-sm">Hybrid Mode</span>
+                    </label>
+                    <label class="label cursor-pointer gap-2 justify-start">
+                        <input type="checkbox" name="ocr_enabled" class="toggle toggle-sm toggle-primary" />
+                        <span class="label-text text-sm">OCR</span>
+                    </label>
+                    <button type="submit" id="uploadBtn" class="btn btn-primary btn-sm">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        Upload
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden mt-6 text-center">
+        <span class="loading loading-spinner loading-lg text-primary"></span>
+        <p class="mt-2 text-sm text-base-content/60">처리 중입니다... <span id="statusText">PENDING</span></p>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden mt-6 fade-in">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold">Results</h2>
+            <div class="badge badge-success gap-1">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                <span id="resultBadge">COMPLETED</span>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div role="tablist" class="tabs tabs-bordered mb-4">
+            <a role="tab" class="tab tab-active" data-tab="text">Text</a>
+            <a role="tab" class="tab" data-tab="markdown">Markdown</a>
+            <a role="tab" class="tab" data-tab="json">JSON</a>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="card bg-base-100 shadow-md">
+            <div class="card-body p-4">
+                <div id="tab-text" class="tab-content">
+                    <textarea id="resultText" class="result-box textarea textarea-bordered w-full" rows="20" readonly></textarea>
+                </div>
+                <div id="tab-markdown" class="tab-content hidden">
+                    <textarea id="resultMarkdown" class="result-box textarea textarea-bordered w-full" rows="20" readonly></textarea>
+                </div>
+                <div id="tab-json" class="tab-content hidden">
+                    <textarea id="resultJson" class="result-box textarea textarea-bordered w-full" rows="20" readonly></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const uploadForm = document.getElementById('uploadForm');
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+    const statusText = document.getElementById('statusText');
+
+    // Drag & Drop
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-primary', 'bg-primary/5'); });
+    dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('border-primary', 'bg-primary/5'); });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-primary', 'bg-primary/5');
+        fileInput.files = e.dataTransfer.files;
+        showFileInfo();
+    });
+    fileInput.addEventListener('change', showFileInfo);
+
+    function showFileInfo() {
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+            fileName.textContent = `${file.name} (${sizeMB} MB)`;
+            fileInfo.classList.remove('hidden');
+        }
+    }
+
+    // Tab switching
+    document.querySelectorAll('[data-tab]').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('[data-tab]').forEach(t => t.classList.remove('tab-active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            tab.classList.add('tab-active');
+            document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
+        });
+    });
+
+    // Upload & Poll
+    uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!fileInput.files.length) return;
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('chunking_strategy', uploadForm.chunking_strategy.value);
+        formData.append('use_hybrid', uploadForm.use_hybrid.checked);
+        formData.append('ocr_enabled', uploadForm.ocr_enabled.checked);
+
+        loading.classList.remove('hidden');
+        results.classList.add('hidden');
+        document.getElementById('uploadBtn').disabled = true;
+
+        try {
+            const res = await fetch('/api/v1/files/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.detail?.message || 'Upload failed');
+                return;
+            }
+
+            // Poll for result
+            await pollJob(data.job_id);
+        } catch (err) {
+            alert('Error: ' + err.message);
+        } finally {
+            document.getElementById('uploadBtn').disabled = false;
+        }
+    });
+
+    async function pollJob(jobId) {
+        while (true) {
+            await new Promise(r => setTimeout(r, 2000));
+            const res = await fetch(`/api/v1/jobs/${jobId}`);
+            const job = await res.json();
+            statusText.textContent = job.status;
+
+            if (job.status === 'COMPLETED') {
+                const resultRes = await fetch(`/api/v1/jobs/${jobId}/result`);
+                const result = await resultRes.json();
+                showResults(result, job);
+                return;
+            } else if (job.status === 'FAILED') {
+                loading.classList.add('hidden');
+                alert('처리 실패: ' + (job.error_message || 'Unknown error'));
+                return;
+            }
+        }
+    }
+
+    function showResults(result, job) {
+        loading.classList.add('hidden');
+        results.classList.remove('hidden');
+
+        document.getElementById('resultText').value = result.content_text || '';
+        document.getElementById('resultMarkdown').value = result.content_markdown || '';
+        document.getElementById('resultJson').value = JSON.stringify(result.content_json, null, 2) || '';
+
+        const badge = document.getElementById('resultBadge');
+        if (job.auto_reprocessed) {
+            badge.textContent = `COMPLETED (auto: ${job.reprocess_reason})`;
+        }
+    }
+</script>
+{% endblock %}
