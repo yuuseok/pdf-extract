@@ -25,24 +25,32 @@ class PdfService:
                 "quiet": True,
             }
 
+            # OCR이 필요하면 반드시 hybrid + full 모드 (OCR은 hybrid 서버에서만 가능)
+            if ocr_enabled and not use_hybrid:
+                use_hybrid = True
+                logger.info("ocr_enabled=True → hybrid mode auto-activated")
+
             if use_hybrid:
                 from app.config import settings
-                # convert_kwargs["hybrid"] = "docling-fast"
-                # convert_kwargs["hybrid_url"] = settings.hybrid_server_url
-                # logger.info(f"Using hybrid mode for {file_path}")
+                # hybrid_mode 결정:
+                #   - ocr_enabled=True → "full" (triage 건너뛰고 전체를 backend로)
+                #   - ocr_enabled=False → "auto" (triage가 복잡한 페이지만 backend로)
+                hybrid_mode = "full" if ocr_enabled else "auto"
+
                 convert_kwargs.update({
                     "hybrid": "docling-fast",
+                    "hybrid_mode": hybrid_mode,
                     "hybrid_url": settings.hybrid_server_url,
-                    "hybrid_timeout": "600000",   # 10분, 필요 시 "0"
-                    "hybrid_fallback": True,      # 백엔드 실패 시 Java fallback
+                    "hybrid_timeout": "600000",
+                    "hybrid_fallback": True,
                 })
 
                 logger.info(
-                    "Using hybrid mode for %s (url=%s, timeout=%s, fallback=%s)",
-                    file_path,
+                    "Hybrid mode: %s, mode=%s, url=%s (file: %s)",
+                    "OCR+full" if ocr_enabled else "auto",
+                    hybrid_mode,
                     settings.hybrid_server_url,
-                    convert_kwargs["hybrid_timeout"],
-                    convert_kwargs["hybrid_fallback"],
+                    file_path,
                 )
 
             opendataloader_pdf.convert(**convert_kwargs)
