@@ -128,12 +128,12 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 @app.get("/", response_class=HTMLResponse)
 async def page_upload(request: Request):
-    return templates.TemplateResponse("upload.html", {"request": request})
+    return templates.TemplateResponse(request, "upload.html")
 
 
 @app.get("/files", response_class=HTMLResponse)
 async def page_files(request: Request):
-    return templates.TemplateResponse("files.html", {"request": request})
+    return templates.TemplateResponse(request, "files.html")
 
 
 @app.get("/files/{file_id}", response_class=HTMLResponse)
@@ -148,8 +148,8 @@ async def page_detail(request: Request, file_id: str):
         file_repo = FileRepository(db)
         file_obj = await file_repo.get_by_id(UUID(file_id))
         if not file_obj:
-            return templates.TemplateResponse("detail.html", {
-                "request": request, "file": None, "job": None, "result": None,
+            return templates.TemplateResponse(request, "detail.html", {
+                "file": None, "job": None, "result": None,
             })
 
         job_repo = JobRepository(db)
@@ -161,8 +161,8 @@ async def page_detail(request: Request, file_id: str):
             result_repo = ResultRepository(db)
             result = await result_repo.get_by_job_id(job.id)
 
-    return templates.TemplateResponse("detail.html", {
-        "request": request, "file": file_obj, "job": job, "result": result,
+    return templates.TemplateResponse(request, "detail.html", {
+        "file": file_obj, "job": job, "result": result,
     })
 
 
