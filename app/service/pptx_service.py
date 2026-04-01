@@ -26,10 +26,12 @@ class PptxService:
                         continue
 
                     # 제목 shape 감지
-                    if shape.shape_type and hasattr(shape, "placeholder_format"):
+                    try:
                         if shape.placeholder_format and shape.placeholder_format.idx == 0:
                             slide_data["title"] = text
                             continue
+                    except (ValueError, AttributeError):
+                        pass
 
                     slide_data["contents"].append({
                         "type": "text",
