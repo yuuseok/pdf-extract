@@ -9,9 +9,13 @@ from app.repository.chunk_repository import ChunkRepository
 from app.repository.job_repository import JobRepository
 from app.repository.result_repository import ResultRepository
 from app.service.chunk_service import ChunkService
+from app.service.csv_service import CsvService
+from app.service.docx_service import DocxService
 from app.service.pdf_service import PdfService
+from app.service.pptx_service import PptxService
 from app.service.quality_checker import QualityChecker
 from app.service.text_normalizer import TextNormalizer
+from app.service.xlsx_service import XlsxService
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +23,24 @@ logger = logging.getLogger(__name__)
 class JobService:
     def __init__(self):
         self.pdf_service = PdfService()
+        self.docx_service = DocxService()
+        self.xlsx_service = XlsxService()
+        self.pptx_service = PptxService()
+        self.csv_service = CsvService()
         self.chunk_service = ChunkService()
         self.normalizer = TextNormalizer()
         self.quality_checker = QualityChecker()
+
+    # 확장자 → 추출 서비스 매핑
+    FORMAT_SERVICE_MAP = {
+        ".pdf": "pdf",
+        ".docx": "docx",
+        ".xlsx": "xlsx",
+        ".xls": "xlsx",
+        ".pptx": "pptx",
+        ".csv": "csv",
+        ".tsv": "csv",
+    }
 
     async def recover_orphaned_jobs(self, db: AsyncSession) -> int:
         repo = JobRepository(db)
@@ -36,7 +55,8 @@ class JobService:
         logger.info(f"Recovered {count} orphaned jobs")
         return count
 
-    async def process_pdf(self, job_id: UUID, db: AsyncSession) -> None:
+    async def process_file(self, job_id: UUID, db: AsyncSession) -> None:
+        """파일 확장자에 따라 적절한 추출 서비스를 호출."""
         job_repo = JobRepository(db)
         result_repo = ResultRepository(db)
         chunk_repo = ChunkRepository(db)
@@ -52,24 +72,19 @@ class JobService:
             await job_repo.update(job)
 
             file_obj = await db.get(File, job.file_id)
+            ext = file_obj.file_extension.lower()
+            format_type = self.FORMAT_SERVICE_MAP.get(ext)
 
-            # 사용자가 직접 옵션을 지정한 경우 → 바로 해당 모드로 실행
-            if job.ocr_enabled or job.use_hybrid:
-                logger.info(
-                    "User specified mode: ocr_enabled=%s, use_hybrid=%s",
-                    job.ocr_enabled, job.use_hybrid,
-                )
-                extraction = self.pdf_service.extract(
-                    file_path=file_obj.storage_path,
-                    ocr_enabled=job.ocr_enabled,
-                    ocr_languages=job.ocr_languages,
-                    use_hybrid=job.use_hybrid,
-                )
+            if not format_type:
+                raise ValueError(f"Unsupported file extension: {ext}")
+
+            logger.info("Processing %s file: %s", format_type, file_obj.storage_path)
+
+            # 포맷별 추출
+            if format_type == "pdf":
+                extraction = self._extract_pdf(file_obj, job)
             else:
-                # 자동 판단 흐름: 1단계 일반 추출 → 품질 검증 → 필요 시 재처리
-                extraction = self._extract_with_auto_reprocess(
-                    file_obj, job, job_repo, db
-                )
+                extraction = self._extract_document(format_type, file_obj.storage_path)
 
             # Update page count
             if extraction.get("page_count"):
@@ -92,12 +107,25 @@ class JobService:
             job.finished_at = datetime.utcnow()
             await job_repo.update(job)
 
-    def _extract_with_auto_reprocess(
-        self, file_obj: File, job: Job, job_repo, db
-    ) -> dict:
-        """1단계 일반 추출 → 품질 검증 → 필요 시 2단계 재처리."""
+    def _extract_pdf(self, file_obj: File, job: Job) -> dict:
+        """PDF 추출: 사용자 옵션 또는 자동 품질 판단."""
+        if job.ocr_enabled or job.use_hybrid:
+            logger.info(
+                "User specified mode: ocr_enabled=%s, use_hybrid=%s",
+                job.ocr_enabled, job.use_hybrid,
+            )
+            return self.pdf_service.extract(
+                file_path=file_obj.storage_path,
+                ocr_enabled=job.ocr_enabled,
+                ocr_languages=job.ocr_languages,
+                use_hybrid=job.use_hybrid,
+            )
 
-        # 1단계: 일반 모드 추출
+        # 자동 판단: 1단계 일반 추출 → 품질 검증 → 필요 시 재처리
+        return self._extract_pdf_with_auto_reprocess(file_obj, job)
+
+    def _extract_pdf_with_auto_reprocess(self, file_obj: File, job: Job) -> dict:
+        """1단계 일반 추출 → 품질 검증 → 필요 시 2단계 재처리."""
         logger.info("Step 1: Normal mode extraction for %s", file_obj.storage_path)
         extraction = self.pdf_service.extract(
             file_path=file_obj.storage_path,
@@ -106,18 +134,16 @@ class JobService:
         )
 
         page_count = extraction.get("page_count")
-
-        # 품질 검증
         quality = self.quality_checker.check(extraction, page_count)
         logger.info(
-            "Quality check: passed=%s, reason=%s, details=%s",
-            quality.passed, quality.reason, quality.details,
+            "Quality check: passed=%s, reason=%s",
+            quality.passed, quality.reason,
         )
 
         if quality.passed:
             return extraction
 
-        # 2단계: 재처리 필요
+        # 2단계: 재처리
         logger.info(
             "Step 2: Reprocessing with mode=%s (reason: %s)",
             quality.recommended_mode, quality.reason,
@@ -136,11 +162,20 @@ class JobService:
                 use_hybrid=True,
             )
 
-        # 재처리 기록
         job.auto_reprocessed = True
         job.reprocess_reason = quality.reason
-
         return extraction
+
+    def _extract_document(self, format_type: str, file_path: str) -> dict:
+        """PDF 이외 문서 포맷 추출."""
+        service_map = {
+            "docx": self.docx_service,
+            "xlsx": self.xlsx_service,
+            "pptx": self.pptx_service,
+            "csv": self.csv_service,
+        }
+        service = service_map[format_type]
+        return service.extract(file_path)
 
     async def _save_results_and_chunks(
         self,
@@ -150,12 +185,9 @@ class JobService:
         chunk_repo: ChunkRepository,
     ) -> None:
         """추출 결과를 정규화하여 저장하고 청킹 처리."""
-
-        # 정규화
         normalized_text = self.normalizer.normalize(extraction["text"])
         normalized_markdown = self.normalizer.normalize(extraction["markdown"])
 
-        # 결과 저장
         result = Result(
             job_id=job.id,
             file_id=job.file_id,
@@ -177,7 +209,6 @@ class JobService:
                 extraction["json"], job.chunk_size or 500, job.chunk_overlap or 50
             )
 
-        # 청크 저장 (정규화 적용)
         chunk_models = [
             Chunk(
                 result_id=result.id,
