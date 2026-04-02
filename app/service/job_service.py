@@ -11,6 +11,7 @@ from app.repository.result_repository import ResultRepository
 from app.service.chunk_service import ChunkService
 from app.service.csv_service import CsvService
 from app.service.docx_service import DocxService
+from app.service.hwpx_service import HwpxService
 from app.service.pdf_service import PdfService
 from app.service.pptx_service import PptxService
 from app.service.quality_checker import QualityChecker
@@ -27,6 +28,7 @@ class JobService:
         self.xlsx_service = XlsxService()
         self.pptx_service = PptxService()
         self.csv_service = CsvService()
+        self.hwpx_service = HwpxService()
         self.chunk_service = ChunkService()
         self.normalizer = TextNormalizer()
         self.quality_checker = QualityChecker()
@@ -40,6 +42,8 @@ class JobService:
         ".pptx": "pptx",
         ".csv": "csv",
         ".tsv": "csv",
+        ".hwp": "hwpx",
+        ".hwpx": "hwpx",
     }
 
     async def recover_orphaned_jobs(self, db: AsyncSession) -> int:
@@ -173,6 +177,7 @@ class JobService:
             "xlsx": self.xlsx_service,
             "pptx": self.pptx_service,
             "csv": self.csv_service,
+            "hwpx": self.hwpx_service,
         }
         service = service_map[format_type]
         return service.extract(file_path)

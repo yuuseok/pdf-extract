@@ -14,6 +14,7 @@ class FileService:
         ".xlsx", ".xls",
         ".pptx",
         ".csv", ".tsv",
+        ".hwp", ".hwpx",
     }
 
     ALLOWED_MIME_TYPES = {
@@ -24,10 +25,14 @@ class FileService:
         "application/vnd.openxmlformats-officedocument.presentationml.presentation", # .pptx
         "text/csv",                                                                 # .csv
         "text/tab-separated-values",                                                # .tsv
+        "application/x-hwp",                                                        # .hwp
+        "application/haansofthwp",                                                  # .hwp
+        "application/vnd.hancom.hwpx",                                              # .hwpx
+        "application/x-hwpx+zip",                                                   # .hwpx
         "application/octet-stream",  # 일부 클라이언트가 보내는 범용 타입
     }
 
-    SUPPORTED_FORMATS_MSG = "지원 형식: PDF, Word(.docx), Excel(.xlsx), PowerPoint(.pptx), CSV/TSV"
+    SUPPORTED_FORMATS_MSG = "지원 형식: PDF, Word(.docx), Excel(.xlsx), PowerPoint(.pptx), CSV/TSV, HWP/HWPX"
 
     def validate_file(self, file: UploadFile) -> None:
         ext = os.path.splitext(file.filename or "")[1].lower()
