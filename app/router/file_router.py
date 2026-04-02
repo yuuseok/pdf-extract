@@ -77,7 +77,7 @@ async def upload_file(
 async def list_files(page: int = 1, per_page: int = 20):
     async with async_session() as db:
         file_repo = FileRepository(db)
-        files, total = await file_repo.get_all(page=page, per_page=per_page)
+        files, total = await file_repo.get_list(page=page, per_page=per_page)
         return {
             "items": [FileResponse.model_validate(f) for f in files],
             "total": total,
