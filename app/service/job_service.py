@@ -9,15 +9,24 @@ from app.repository.chunk_repository import ChunkRepository
 from app.repository.job_repository import JobRepository
 from app.repository.result_repository import ResultRepository
 from app.service.chunk_service import ChunkService
+from app.service.hwpx_service import HwpxService
 from app.service.pdf_service import PdfService
 from app.service.text_normalizer import TextNormalizer
 
 logger = logging.getLogger(__name__)
 
+# 확장자 → 서비스 매핑
+FORMAT_SERVICE_MAP: dict[str, str] = {
+    ".pdf": "pdf",
+    ".hwp": "hwpx",   # 레거시 HWP는 hwpx 서비스에서 에러 처리
+    ".hwpx": "hwpx",
+}
+
 
 class JobService:
     def __init__(self):
         self.pdf_service = PdfService()
+        self.hwpx_service = HwpxService()
         self.chunk_service = ChunkService()
         self.normalizer = TextNormalizer()
 
@@ -34,7 +43,26 @@ class JobService:
         logger.info(f"Recovered {count} orphaned jobs")
         return count
 
-    async def process_pdf(self, job_id: UUID, db: AsyncSession) -> None:
+    def _extract(self, file_obj: File, job: Job) -> dict:
+        """파일 확장자에 따라 적절한 서비스로 추출을 수행한다."""
+        ext = (file_obj.file_extension or "").lower()
+        service_key = FORMAT_SERVICE_MAP.get(ext)
+
+        if service_key == "hwpx":
+            return self.hwpx_service.extract(file_path=file_obj.storage_path)
+        elif service_key == "pdf" or service_key is None:
+            # 기본값: PDF 서비스
+            return self.pdf_service.extract(
+                file_path=file_obj.storage_path,
+                ocr_enabled=job.ocr_enabled,
+                ocr_languages=job.ocr_languages,
+                use_hybrid=job.use_hybrid,
+            )
+        else:
+            raise ValueError(f"지원하지 않는 파일 형식: {ext}")
+
+    async def process_job(self, job_id: UUID, db: AsyncSession) -> None:
+        """파일 형식에 따라 적절한 서비스로 작업을 처리한다."""
         job_repo = JobRepository(db)
         result_repo = ResultRepository(db)
         chunk_repo = ChunkRepository(db)
@@ -49,21 +77,16 @@ class JobService:
             job.started_at = datetime.utcnow()
             await job_repo.update(job)
 
-            # Extract PDF
+            # 파일 형식에 따라 추출
             file_obj = await db.get(File, job.file_id)
-            extraction = self.pdf_service.extract(
-                file_path=file_obj.storage_path,
-                ocr_enabled=job.ocr_enabled,
-                ocr_languages=job.ocr_languages,
-                use_hybrid=job.use_hybrid,
-            )
+            extraction = self._extract(file_obj, job)
 
             # Update page count
             if extraction.get("page_count"):
                 file_obj.page_count = extraction["page_count"]
                 await db.commit()
 
-            # Normalize text for RAG/search (markdown, json은 원본 유지)
+            # Normalize text for RAG/search
             normalized_text = self.normalizer.normalize(extraction["text"])
             normalized_markdown = self.normalizer.normalize(extraction["markdown"])
 
@@ -115,3 +138,7 @@ class JobService:
             job.error_message = str(e)
             job.finished_at = datetime.utcnow()
             await job_repo.update(job)
+
+    async def process_pdf(self, job_id: UUID, db: AsyncSession) -> None:
+        """하위 호환성을 위한 래퍼. process_job으로 위임."""
+        await self.process_job(job_id, db)

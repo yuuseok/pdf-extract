@@ -63,7 +63,7 @@ async def upload_file(
     # Start background task with a fresh DB session
     async def run_job():
         async with async_session() as session:
-            await JobService().process_pdf(job.id, session)
+            await JobService().process_job(job.id, session)
 
     asyncio.get_event_loop().create_task(run_job())
 
